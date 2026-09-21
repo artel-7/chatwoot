@@ -167,6 +167,9 @@
     },
     "RESOLVE_DROPDOWN": {
       "MARK_PENDING": "Mark as pending",
+      "ESCALATE": "Escalate",
+      "ESCALATE_SUCCESS": "Ticket sent to Plane: {identifier}",
+      "ESCALATE_ERROR": "Failed to send ticket to Plane",
       "SNOOZE_UNTIL": "Snooze",
       "SNOOZE": {
         "TITLE": "Snooze until",

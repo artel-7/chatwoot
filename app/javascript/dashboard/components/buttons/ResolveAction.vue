@@ -19,6 +19,7 @@ import {
 import ButtonGroup from 'dashboard/components-next/buttonGroup/ButtonGroup.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import ConversationResolveAttributesModal from 'dashboard/components-next/ConversationWorkflow/ConversationResolveAttributesModal.vue';
+import ConversationApi from 'dashboard/api/inbox/conversation';
 
 const store = useStore();
 const getters = useStoreGetters();
@@ -27,6 +28,7 @@ const { checkMissingAttributes } = useConversationRequiredAttributes();
 
 const arrowDownButtonRef = ref(null);
 const isLoading = ref(false);
+const isEscalating = ref(false);
 const resolveAttributesModalRef = ref(null);
 
 const [showActionsDropdown, toggleDropdown] = useToggle();
@@ -79,6 +81,36 @@ const getConversationParams = () => {
 const openSnoozeModal = () => {
   const ninja = document.querySelector('ninja-keys');
   ninja.open({ parent: 'snooze_conversation' });
+};
+
+const escalateToPlane = async () => {
+  closeDropdown();
+  if (isEscalating.value || !currentChat.value?.id) {
+    return;
+  }
+
+  isEscalating.value = true;
+  try {
+    const { data } = await ConversationApi.escalate(currentChat.value.id);
+    const identifier = data?.identifier || data?.issue_id || '';
+    store.commit('CHANGE_CONVERSATION_STATUS', {
+      conversationId: currentChat.value.id,
+      status: data?.status || wootConstants.STATUS_TYPE.SNOOZED,
+      snoozedUntil: data?.snoozed_until ?? null,
+    });
+    useAlert(
+      t('CONVERSATION.RESOLVE_DROPDOWN.ESCALATE_SUCCESS', {
+        identifier,
+      })
+    );
+  } catch (error) {
+    const message =
+      error?.response?.data?.error ||
+      t('CONVERSATION.RESOLVE_DROPDOWN.ESCALATE_ERROR');
+    useAlert(message);
+  } finally {
+    isEscalating.value = false;
+  }
 };
 
 const toggleStatus = (status, snoozedUntil, customAttributes = null) => {
@@ -228,7 +260,22 @@ useEmitter(CMD_RESOLVE_CONVERSATION, onCmdResolveConversation);
       v-on-clickaway="closeDropdown"
       class="border rounded-lg shadow-lg border-n-strong dark:border-n-strong box-content p-2 w-fit z-10 bg-n-alpha-3 backdrop-blur-[100px] absolute block left-auto top-full mt-0.5 start-0 xl:start-auto xl:end-0 max-w-[12.5rem] min-w-[9.75rem] [&_ul>li]:mb-0"
     >
-      <WootDropdownMenu class="mb-0">
+      <WootDropdownMenu class="mb-0" data-testid="resolve-actions-menu">
+        <WootDropdownItem>
+          <Button
+            data-testid="escalate-to-plane"
+            :label="t('CONVERSATION.RESOLVE_DROPDOWN.ESCALATE')"
+            ghost
+            slate
+            sm
+            start
+            icon="i-lucide-arrow-up-right"
+            class="w-full"
+            :is-loading="isEscalating"
+            :disabled="isEscalating"
+            @click="escalateToPlane"
+          />
+        </WootDropdownItem>
         <WootDropdownItem v-if="!isPending">
           <Button
             :label="t('CONVERSATION.RESOLVE_DROPDOWN.SNOOZE_UNTIL')"

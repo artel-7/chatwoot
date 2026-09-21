@@ -364,6 +364,9 @@ en:
       sla:
         added: '%{user_name} added SLA policy %{sla_name}'
         removed: '%{user_name} removed SLA policy %{sla_name}'
+      plane:
+        escalated: '%{user_name} escalated this conversation to Plane %{issue_id} (%{issue_url})'
+        contact_notice: 'Your request has been transferred to development'
       linear:
         issue_created: 'Linear issue %{issue_id} was created by %{user_name}'
         issue_linked: 'Linear issue %{issue_id} was linked by %{user_name}'

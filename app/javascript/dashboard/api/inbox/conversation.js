@@ -148,6 +148,10 @@ class ConversationApi extends ApiClient {
     return axios.get(`${this.url}/${conversationId}/inbox_assistant`);
   }
 
+  escalate(conversationId) {
+    return axios.post(`${this.url}/${conversationId}/escalation`);
+  }
+
   delete(conversationId) {
     return axios.delete(`${this.url}/${conversationId}`);
   }

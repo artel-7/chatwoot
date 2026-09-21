@@ -154,6 +154,9 @@
     },
     "RESOLVE_DROPDOWN": {
       "MARK_PENDING": "Отметить как ожидающие",
+      "ESCALATE": "Эскалация",
+      "ESCALATE_SUCCESS": "Тикет отправлен в Plane: {identifier}",
+      "ESCALATE_ERROR": "Не удалось отправить тикет в Plane",
       "SNOOZE_UNTIL": "Отложено",
       "SNOOZE": {
         "TITLE": "Отложить до",

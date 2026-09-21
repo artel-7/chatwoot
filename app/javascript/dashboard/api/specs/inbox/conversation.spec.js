@@ -19,6 +19,7 @@ describe('#ConversationAPI', () => {
     expect(conversationAPI).toHaveProperty('meta');
     expect(conversationAPI).toHaveProperty('sendEmailTranscript');
     expect(conversationAPI).toHaveProperty('filter');
+    expect(conversationAPI).toHaveProperty('escalate');
   });
 
   describe('API calls', () => {
