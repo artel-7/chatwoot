@@ -1,0 +1,8 @@
+<% content_for :title, @video.title %>
+<p class="lead"><a href="<%= video_materials_catalog_path %>">← Каталог видео</a></p>
+<h1><%= @video.title %></h1>
+<% if @video.description.present? %>
+  <p class="desc"><%= @video.description %></p>
+<% end %>
+<video controls preload="metadata" src="<%= video_material_file_path(token: @video.token) %>"></video>
+<p class="meta">Прямая ссылка на файл: <a href="<%= video_material_file_path(token: @video.token) %>"><%= @video.file_url %></a></p>

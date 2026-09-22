@@ -1,0 +1,18 @@
+<% content_for :title, 'Видеоматериалы' %>
+<h1>Видеоматериалы</h1>
+<p class="lead">Каталог обучающих и справочных видео. Откройте материал по ссылке — вход не требуется.</p>
+<% if @videos.any? %>
+  <div class="grid">
+    <% @videos.each do |video| %>
+      <a class="card" href="<%= video_material_path(token: video.token) %>">
+        <h2><%= video.title %></h2>
+        <% if video.description.present? %>
+          <p class="desc"><%= video.description %></p>
+        <% end %>
+        <div class="meta"><%= video.created_at.strftime('%d.%m.%Y %H:%M') %></div>
+      </a>
+    <% end %>
+  </div>
+<% else %>
+  <p class="empty">Пока нет загруженных видео.</p>
+<% end %>

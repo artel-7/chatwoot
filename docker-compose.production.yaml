@@ -12,6 +12,9 @@ services:
       - ./config/locales/en.yml:/app/config/locales/en.yml
       - ./config/locales/ru.yml:/app/config/locales/ru.yml
       - ./public/plane-escalation.js:/app/public/plane-escalation.js
+      - ./public/video-library.js:/app/public/video-library.js
+      - ./db/migrate/20260921120000_create_video_materials.rb:/app/db/migrate/20260921120000_create_video_materials.rb
+      - ./db/migrate/20260921140000_add_description_to_video_materials.rb:/app/db/migrate/20260921140000_add_description_to_video_materials.rb
 
   rails:
     <<: *base

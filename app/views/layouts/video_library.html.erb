@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= content_for?(:title) ? yield(:title) : 'Видеоматериалы' %></title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: #0b0f19;
+        color: #e5e7eb;
+      }
+      .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { font-size: 28px; margin: 0 0 8px; }
+      p.lead { color: #9ca3af; margin: 0 0 28px; }
+      a { color: #93c5fd; }
+      .grid { display: grid; gap: 16px; }
+      .card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: #151b2b;
+        border: 1px solid #243049;
+        border-radius: 16px;
+        padding: 16px;
+      }
+      .card:hover { border-color: #3b82f6; }
+      .card h2 { font-size: 18px; margin: 0 0 8px; }
+      .desc { color: #d1d5db; margin: 0 0 8px; white-space: pre-wrap; }
+      .meta { color: #9ca3af; font-size: 13px; }
+      video {
+        width: 100%;
+        max-height: 70vh;
+        background: #000;
+        border-radius: 16px;
+      }
+      .empty { color: #9ca3af; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <%= yield %>
+    </div>
+  </body>
+</html>

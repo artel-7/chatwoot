@@ -40,6 +40,9 @@ Rails.application.routes.draw do
 
   get '/health', to: 'health#show'
   get '/robots.txt', to: 'robots#show', format: false
+  get '/videos', to: 'video_materials#index', as: :video_materials_catalog
+  get '/videos/:token', to: 'video_materials#show', as: :video_material
+  get '/videos/:token/file', to: 'video_materials#file', as: :video_material_file
   get '/api', to: 'api#index'
   namespace :api, defaults: { format: 'json' } do
     namespace :v1 do
@@ -134,6 +137,7 @@ Rails.application.routes.draw do
             end
           end
           resources :canned_responses, only: [:index, :create, :update, :destroy]
+          resources :video_materials, only: [:index, :create, :update, :destroy]
           resources :automation_rules, only: [:index, :create, :show, :update, :destroy] do
             post :clone
           end
