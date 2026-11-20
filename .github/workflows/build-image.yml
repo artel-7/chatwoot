@@ -1,9 +1,6 @@
-# Build Artel-7 Chatwoot CE images on self-hosted runners and deploy to home hubs.
-# Mirrors auth/bi/… conventions: push to `dev` → GHCR :dev; push to `prod` → GHCR :prod
-# then recreate chatwoot-rails / chatwoot-sidekiq on hub1 + hub2.
-#
-# Image is the CE (FOSS) edition — enterprise/ tree is stripped before build,
-# same as upstream publish_foss_docker.yml.
+# Build Artel-7 Chatwoot CE on GitHub-hosted runners (empty ~7Gi VM).
+# NEVER build this image on home hubs — hub1/2 previously OOM-rebooted mid-bundle.
+# Home self-hosted runners only pull + recreate after GHCR push.
 
 name: Build and Deploy Chatwoot Image
 
@@ -13,6 +10,18 @@ on:
       - dev
       - prod
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'GHCR tag to push'
+        type: choice
+        options:
+          - dev
+          - prod
+        default: prod
+      deploy_home:
+        description: 'Deploy to home hubs after push (self-hosted pull only)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -20,20 +29,46 @@ permissions:
 
 env:
   IMAGE: ghcr.io/artel-7/chatwoot
+  # Keep upstream Vite heap. Cap of 2048 OOM'd assets:precompile on GHA
+  # ("JavaScript heap out of memory" / Build with Vite failed).
+  NODE_OPTIONS_BUILD: '--max-old-space-size=4096 --openssl-legacy-provider'
 
 jobs:
-  build-dev:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dev'
-    runs-on: self-hosted
+  build:
+    # GitHub-hosted: no Plane/BI/Trino competing for RAM. Hubs stay up.
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      tag: ${{ steps.tags.outputs.tag }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Strip enterprise code (CE edition)
+      - name: Resolve image tag
+        id: tags
         run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.image_tag }}"
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            TAG=prod
+          else
+            TAG=dev
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Building ${IMAGE}:${TAG}"
+
+      - name: Strip enterprise + low-memory build knobs (CE)
+        run: |
+          set -euo pipefail
           rm -rf enterprise spec/enterprise
           echo -en '\nENV CW_EDITION="ce"\n' >> docker/Dockerfile
+          # Serial native gem builds — parallel -j4 spikes RAM during grpc/nokogiri.
+          sed -i 's/bundle install -j 4/bundle install -j 1/g' docker/Dockerfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -41,11 +76,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        run: |
-          docker buildx inspect a7-builder --bootstrap >/dev/null
-          docker buildx use a7-builder
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -54,102 +84,58 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE }}:dev
-            ${{ env.IMAGE }}:latest
-          # Chatwoot production image is heavy; reuse BuildKit cache on a7-builder.
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.tag }}
+            ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: |
+            NODE_OPTIONS=${{ env.NODE_OPTIONS_BUILD }}
           provenance: false
+          # GHA cache — do not use hub BuildKit.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Clean up local images
-        run: docker image prune -f
-
-  build-and-deploy-prod:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/prod'
+  deploy-home:
+    needs: build
+    if: |
+      always() && needs.build.result == 'success' && (
+        github.ref == 'refs/heads/prod' ||
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_home)
+      )
     runs-on: self-hosted
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Strip enterprise code (CE edition)
-        run: |
-          rm -rf enterprise spec/enterprise
-          echo -en '\nENV CW_EDITION="ce"\n' >> docker/Dockerfile
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        run: |
-          docker buildx inspect a7-builder --bootstrap >/dev/null
-          docker buildx use a7-builder
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile
-          push: true
-          tags: ${{ env.IMAGE }}:prod
-          provenance: false
-
-      - name: Deploy to home hubs
+      - name: Pull and recreate Chatwoot on home hubs
         env:
-          # Short-lived token so both hubs can pull the private GHCR package.
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
+          IMAGE="ghcr.io/artel-7/chatwoot:${IMAGE_TAG}"
+          echo "Deploying ${IMAGE} to hub1–4 (pull only — no build on hubs)"
 
-          deploy_local() {
-            local compose="$1"
-            echo "=== local deploy (${compose}) ==="
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            cd /home/bob/infrastructure
-            docker compose -f "$compose" pull chatwoot-rails chatwoot-sidekiq
-            docker compose -f "$compose" up -d --no-deps chatwoot-rails chatwoot-sidekiq
-            # Plane escalation / video materials migrations (idempotent).
-            docker compose -f "$compose" exec -T chatwoot-rails \
-              bundle exec rails db:migrate
-            echo "local deploy done"
-          }
-
-          deploy_peer() {
+          deploy_hub() {
             local hub="$1"
             local compose="$2"
-            echo "=== peer deploy ${hub} (${compose}) ==="
-            # Token via stdin — not argv — so it does not show in `ps`.
-            ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            echo "=== ${hub} (${compose}) ==="
+            # Hubs share ~/.ssh/artel_hub (LAN deploy key). GITHUB_TOKEN lacks hub SSH.
+            # Login token via stdin (not argv). Retag to :prod so existing hubN.yml keeps working.
+            ssh -i "$HOME/.ssh/artel_hub" -o IdentitiesOnly=yes \
+              -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
               -o ConnectTimeout=20 bob@"$hub" \
               "docker login ghcr.io -u ${GHCR_USER} --password-stdin && \
+               docker pull ${IMAGE} && \
+               docker tag ${IMAGE} ghcr.io/artel-7/chatwoot:prod && \
                cd /home/bob/infrastructure && \
-               docker compose -f ${compose} pull chatwoot-rails chatwoot-sidekiq && \
-               docker compose -f ${compose} up -d --no-deps chatwoot-rails chatwoot-sidekiq && \
-               docker compose -f ${compose} exec -T chatwoot-rails bundle exec rails db:migrate" \
+               docker compose -f ${compose} up -d --no-deps --force-recreate chatwoot-rails chatwoot-sidekiq && \
+               sleep 8 && \
+               docker compose -f ${compose} exec -T chatwoot-rails bundle exec rails db:migrate && \
+               curl -sS -m 10 -o /dev/null -w 'rails:%{http_code}\n' http://127.0.0.1:3013/ || true" \
               <<<"$GHCR_TOKEN"
-            echo "peer deploy done"
           }
 
-          # Prefer identity by LAN IP (hostname may be hub1/hub2).
-          MY_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^192\.168\.1\.20[12]$' | head -1 || true)"
-          case "$MY_IP" in
-            192.168.1.201)
-              deploy_local hub1.yml
-              deploy_peer 192.168.1.202 hub2.yml || echo "::warning::hub2 peer deploy failed"
-              ;;
-            192.168.1.202)
-              deploy_local hub2.yml
-              deploy_peer 192.168.1.201 hub1.yml || echo "::warning::hub1 peer deploy failed"
-              ;;
-            *)
-              echo "::warning::Unknown runner IP (${MY_IP:-none}); deploying both via SSH"
-              deploy_peer 192.168.1.201 hub1.yml || echo "::warning::hub1 deploy failed"
-              deploy_peer 192.168.1.202 hub2.yml || echo "::warning::hub2 deploy failed"
-              ;;
-          esac
-
-      - name: Clean up local images
-        run: docker image prune -f
+          deploy_hub 192.168.1.201 hub1.yml
+          deploy_hub 192.168.1.202 hub2.yml
+          deploy_hub 192.168.1.203 hub3.yml
+          deploy_hub 192.168.1.204 hub4.yml
+          echo "home deploy done"
