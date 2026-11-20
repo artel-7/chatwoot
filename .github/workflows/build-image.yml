@@ -29,8 +29,9 @@ permissions:
 
 env:
   IMAGE: ghcr.io/artel-7/chatwoot
-  # Upstream Dockerfile defaults Node heap to 4096 — too fat even on GHA.
-  NODE_OPTIONS_BUILD: '--max-old-space-size=2048 --openssl-legacy-provider'
+  # Keep upstream Vite heap. Cap of 2048 OOM'd assets:precompile on GHA
+  # ("JavaScript heap out of memory" / Build with Vite failed).
+  NODE_OPTIONS_BUILD: '--max-old-space-size=4096 --openssl-legacy-provider'
 
 jobs:
   build:
@@ -63,10 +64,8 @@ jobs:
           set -euo pipefail
           rm -rf enterprise spec/enterprise
           echo -en '\nENV CW_EDITION="ce"\n' >> docker/Dockerfile
-          # Serial native gem builds — parallel -j4 OOMs 7Gi machines.
+          # Serial native gem builds — parallel -j4 spikes RAM during grpc/nokogiri.
           sed -i 's/bundle install -j 4/bundle install -j 1/g' docker/Dockerfile
-          # Also cap pnpm/node during image build if ARG not passed somehow.
-          sed -i 's/--max-old-space-size=4096/--max-old-space-size=2048/g' docker/Dockerfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
