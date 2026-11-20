@@ -118,8 +118,10 @@ jobs:
             local hub="$1"
             local compose="$2"
             echo "=== ${hub} (${compose}) ==="
+            # Hubs share ~/.ssh/artel_hub (LAN deploy key). GITHUB_TOKEN lacks hub SSH.
             # Login token via stdin (not argv). Retag to :prod so existing hubN.yml keeps working.
-            ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            ssh -i "$HOME/.ssh/artel_hub" -o IdentitiesOnly=yes \
+              -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
               -o ConnectTimeout=20 bob@"$hub" \
               "docker login ghcr.io -u ${GHCR_USER} --password-stdin && \
                docker pull ${IMAGE} && \
